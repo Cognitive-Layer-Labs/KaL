@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 222 47% 4%;
+    --foreground: 210 40% 96%;
+    --card: 222 47% 8%;
+    --card-foreground: 210 40% 96%;
+    --primary: 251 87% 69%;
+    --primary-foreground: 222 47% 4%;
+    --secondary: 222 47% 12%;
+    --secondary-foreground: 210 40% 96%;
+    --muted: 222 47% 12%;
+    --muted-foreground: 215 20% 55%;
+    --accent: 251 87% 69%;
+    --accent-foreground: 222 47% 4%;
+    --border: 222 47% 16%;
+    --input: 222 47% 12%;
+    --ring: 251 87% 69%;
+    --radius: 0.75rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* KG graph canvas */
+.graph-canvas-wrapper canvas {
+  border-radius: var(--radius);
+}

@@ -1,0 +1,19 @@
+# deps
+node_modules/
+
+# next
+.next/
+out/
+
+# cloudflare
+.open-next/
+.wrangler/
+
+# env
+.env
+.env.local
+.env.*.local
+
+# misc
+.DS_Store
+*.pem
