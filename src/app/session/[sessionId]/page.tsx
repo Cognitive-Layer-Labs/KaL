@@ -23,7 +23,6 @@ export default function SessionPage() {
 
   const knowledgeId = searchParams.get("knowledgeId") ?? "";
 
-  // The first question is stored in session storage from the content page
   const [question, setQuestion] = useState<VerifyQuestion | null>(() => {
     if (typeof window === "undefined") return null;
     try {
@@ -34,40 +33,47 @@ export default function SessionPage() {
   });
 
   const [irtState, setIrtState] = useState<IRTState | null>(null);
-  const [lastFeedback, setLastFeedback] = useState<AnswerFeedback | null>(null);
+  const [feedback, setFeedback] = useState<AnswerFeedback | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [fetchingResult, setFetchingResult] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleAnswer = useCallback(
     async (answer: string) => {
       setSubmitting(true);
       setError(null);
       try {
-        const feedback = await submitAnswer(sessionId, answer);
-        setLastFeedback(feedback);
-        setIrtState(feedback.progress);
-
-        if (feedback.isComplete) {
-          setFetchingResult(true);
-          const result = await getResult(sessionId);
-          router.push(
-            `/result/${sessionId}?knowledgeId=${knowledgeId}&passed=${result.competenceIndicator ? "1" : "0"}`
-          );
-          // Store result for result page
-          sessionStorage.setItem(`result_${sessionId}`, JSON.stringify(result));
-        } else if (feedback.nextQuestion) {
-          setQuestion(feedback.nextQuestion);
-          setLastFeedback(null);
-        }
+        const fb = await submitAnswer(sessionId, answer);
+        setIrtState(fb.progress);
+        setFeedback(fb);
       } catch (e) {
         setError((e as Error).message);
       } finally {
         setSubmitting(false);
       }
     },
-    [sessionId, knowledgeId, router]
+    [sessionId]
   );
+
+  const handleNext = useCallback(async () => {
+    if (!feedback) return;
+    if (feedback.isComplete) {
+      setFetchingResult(true);
+      try {
+        const result = await getResult(sessionId);
+        sessionStorage.setItem(`result_${sessionId}`, JSON.stringify(result));
+        router.push(
+          `/result/${sessionId}?knowledgeId=${knowledgeId}&passed=${result.competenceIndicator ? "1" : "0"}`
+        );
+      } catch (e) {
+        setError((e as Error).message);
+        setFetchingResult(false);
+      }
+    } else if (feedback.nextQuestion) {
+      setQuestion(feedback.nextQuestion);
+      setFeedback(null);
+    }
+  }, [feedback, sessionId, knowledgeId, router]);
 
   if (fetchingResult) {
     return (
@@ -116,17 +122,6 @@ export default function SessionPage() {
         )}
       </div>
 
-      {lastFeedback && !lastFeedback.isComplete && (
-        <div className={`rounded-lg border px-4 py-3 text-sm ${
-          lastFeedback.correct
-            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-            : "border-rose-500/30 bg-rose-500/10 text-rose-400"
-        }`}>
-          <p className="font-medium mb-1">{lastFeedback.correct ? "Correct" : "Incorrect"} — Score: {lastFeedback.score}/100</p>
-          <p className="text-xs opacity-80">{lastFeedback.reasoning}</p>
-        </div>
-      )}
-
       {error && (
         <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-400">
           {error}
@@ -136,7 +131,9 @@ export default function SessionPage() {
       <QuestionCard
         question={question}
         onSubmit={handleAnswer}
+        onNext={handleNext}
         isSubmitting={submitting}
+        feedback={feedback}
       />
     </div>
   );

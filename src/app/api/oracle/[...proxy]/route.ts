@@ -20,8 +20,6 @@ function buildTargetUrl(segments: string[], request: NextRequest): URL {
 }
 
 async function proxy(request: NextRequest, segments: string[]): Promise<NextResponse> {
-  if (!ORACLE_API_KEY) return jsonError("POCW_API_KEY missing in server env", 500);
-
   let targetUrl: URL;
   try {
     targetUrl = buildTargetUrl(segments, request);
@@ -30,7 +28,8 @@ async function proxy(request: NextRequest, segments: string[]): Promise<NextResp
   }
 
   const headers = new Headers();
-  headers.set("Authorization", `Bearer ${ORACLE_API_KEY}`);
+  // Only send auth header when a key is configured (omit in local dev with no auth)
+  if (ORACLE_API_KEY) headers.set("Authorization", `Bearer ${ORACLE_API_KEY}`);
   const ct = request.headers.get("content-type");
   if (ct) headers.set("content-type", ct);
   const accept = request.headers.get("accept");

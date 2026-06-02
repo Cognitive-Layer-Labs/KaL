@@ -30,6 +30,8 @@ export interface AnswerFeedback {
     specificity: number;
     reasoning: number;
   };
+  referenceKeyPoints?: string[];
+  correctAnswer?: string;
   progress: {
     questionNumber: number;
     theta: number;
@@ -126,6 +128,7 @@ export interface KGGraph {
     id: string;
     label: string;
     bloomLevel: string;
+    importance: number;
     type?: string;
   }>;
   edges: Array<{
@@ -149,15 +152,34 @@ export async function listContent(params?: {
   const url = `${PROXY}/index${qs.size ? `?${qs}` : ""}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(await extractError(res, "List failed"));
-  return res.json();
+  // Oracle returns { rows: ContentRow[], total } with snake_case field names.
+  // Normalise to { items: ContentItem[], total } with camelCase.
+  const data = await res.json();
+  const raw: any[] = data.rows ?? data.items ?? [];
+  const items: ContentItem[] = raw.map((r) => ({
+    knowledgeId: r.knowledge_id ?? r.knowledgeId,
+    contentId:   r.content_id   ?? r.contentId,
+    source:      r.source,
+    status:      r.status,
+    title:       r.title ?? undefined,
+    createdAt:   r.created_at   ?? r.createdAt,
+  }));
+  return { items, total: data.total ?? items.length };
 }
 
 export async function getIndexStatus(
   knowledgeId: string
-): Promise<{ knowledgeId: string; status: string; error?: string }> {
+): Promise<{ knowledgeId: string; status: string; title?: string; source?: string; error?: string }> {
   const res = await fetch(`${PROXY}/index/${knowledgeId}`);
   if (!res.ok) throw new Error(await extractError(res, "Status check failed"));
-  return res.json();
+  const d = await res.json();
+  return {
+    knowledgeId: d.knowledge_id ?? d.knowledgeId,
+    status:      d.status,
+    title:       d.title  ?? undefined,
+    source:      d.source ?? undefined,
+    error:       d.error  ?? undefined,
+  };
 }
 
 export async function indexUrl(
@@ -169,7 +191,8 @@ export async function indexUrl(
     body: JSON.stringify({ source }),
   });
   if (!res.ok) throw new Error(await extractError(res, "Index failed"));
-  return res.json();
+  const d = await res.json();
+  return { knowledgeId: d.knowledge_id ?? d.knowledgeId, status: d.status, contentId: d.content_id ?? d.contentId };
 }
 
 export async function uploadFile(
@@ -181,13 +204,22 @@ export async function uploadFile(
     body: await file.arrayBuffer(),
   });
   if (!res.ok) throw new Error(await extractError(res, "Upload failed"));
-  return res.json();
+  const d = await res.json();
+  return { knowledgeId: d.knowledge_id ?? d.knowledgeId, status: d.status, contentId: d.content_id ?? d.contentId };
 }
 
 export async function getGraph(knowledgeId: string): Promise<KGGraph> {
   const res = await fetch(`${PROXY}/graph/${knowledgeId}`);
   if (!res.ok) throw new Error(await extractError(res, "Graph fetch failed"));
-  return res.json();
+  const data = await res.json();
+  return {
+    nodes: data.nodes ?? [],
+    edges: (data.edges ?? []).map((e: any) => ({
+      source: e.source,
+      target: e.target,
+      relation: e.relation ?? e.relationship ?? "",
+    })),
+  };
 }
 
 // ─── Verify API ───────────────────────────────────────────────────────────────
@@ -196,7 +228,7 @@ export async function startVerify(
   knowledgeId: string,
   subject: string,
   config?: SessionConfig
-): Promise<{ sessionId: string; question: VerifyQuestion }> {
+): Promise<{ sessionId: string; question: VerifyQuestion; importantConceptCount: number; maxQuestions: number }> {
   const res = await fetch(`${PROXY}/verify`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
