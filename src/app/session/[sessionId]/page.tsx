@@ -78,7 +78,7 @@ export default function SessionPage() {
   if (fetchingResult) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <Brain className="h-12 w-12 text-[#A29BFE] animate-pulse" />
+        <Brain className="h-12 w-12 text-kal-light animate-pulse" />
         <p className="text-muted-foreground">Finalizing your result…</p>
       </div>
     );
@@ -88,8 +88,8 @@ export default function SessionPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <p className="text-muted-foreground">Session not found or expired.</p>
-        <Button variant="outline" onClick={() => router.push("/")}>
-          Back to catalog
+        <Button variant="outline" onClick={() => router.push("/courses")}>
+          Back to courses
         </Button>
       </div>
     );
@@ -103,7 +103,7 @@ export default function SessionPage() {
           <span>Adaptive Test</span>
           {irtState && (
             <>
-              <span className="text-[#A29BFE]">θ={irtState.theta.toFixed(2)}</span>
+              <span className="text-kal-light">θ={irtState.theta.toFixed(2)}</span>
               <span className="text-xs">SE={irtState.se.toFixed(2)}</span>
               <Badge variant="outline" className="text-xs">{irtState.bloomLevel}</Badge>
             </>

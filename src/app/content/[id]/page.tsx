@@ -11,6 +11,7 @@ import { KGGraphCard } from "@/components/KGGraphCard";
 import { useAccount } from "wagmi";
 import { WalletButton } from "@/components/WalletButton";
 import { bloomColor } from "@/lib/utils";
+import { useMounted } from "@/lib/use-mounted";
 
 type DifficultyPreset = "easy" | "medium" | "hard";
 
@@ -96,6 +97,7 @@ export default function ContentPage() {
   const { id: knowledgeId } = useParams<{ id: string }>();
   const router = useRouter();
   const { address, isConnected } = useAccount();
+  const mounted = useMounted();
 
   const [content, setContent] = useState<ContentStatus | null>(null);
   const [rawGraph, setRawGraph] = useState<KGGraph | null>(null);
@@ -160,9 +162,9 @@ export default function ContentPage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
-      <Link href="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+      <Link href="/courses" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
         <ArrowLeft className="h-4 w-4" />
-        Back to catalog
+        Back to courses
       </Link>
 
       {/* Title + ID */}
@@ -178,7 +180,7 @@ export default function ContentPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <BarChart2 className="h-4 w-4 text-[#A29BFE]" />
+              <BarChart2 className="h-4 w-4 text-kal-light" />
               Knowledge Graph — {stats.total} concepts, {stats.important} key
             </CardTitle>
           </CardHeader>
@@ -233,7 +235,7 @@ export default function ContentPage() {
             </div>
 
             <p className="text-xs text-muted-foreground border-t border-border pt-2">
-              <Brain className="h-3 w-3 inline mr-1 text-[#A29BFE]" />
+              <Brain className="h-3 w-3 inline mr-1 text-kal-light" />
               Test will cover all {stats.important} key concepts —{" "}
               {minQuestions === presetCap
                 ? `${minQuestions} questions`
@@ -251,7 +253,7 @@ export default function ContentPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
-            <BookOpen className="h-4 w-4 text-[#A29BFE]" />
+            <BookOpen className="h-4 w-4 text-kal-light" />
             Choose difficulty
           </CardTitle>
         </CardHeader>
@@ -269,8 +271,8 @@ export default function ContentPage() {
                   onClick={() => setPreset(p)}
                   className={`rounded-lg border p-3 text-left text-sm transition-colors ${
                     preset === p
-                      ? "border-[#6C5CE7] bg-[#6C5CE7]/10"
-                      : "border-border hover:border-[#6C5CE7]/40"
+                      ? "border-kal bg-kal/10"
+                      : "border-border hover:border-kal/40"
                   }`}
                 >
                   <div className="font-semibold mb-1">{meta.label}</div>
@@ -280,7 +282,7 @@ export default function ContentPage() {
                       : `${cardMin}–${meta.capQuestions} questions`}
                   </div>
                   <div className="text-xs text-muted-foreground mb-2">{meta.passThreshold}</div>
-                  <div className="flex items-center gap-1 text-[#A29BFE] text-xs font-semibold">
+                  <div className="flex items-center gap-1 text-kal-light text-xs font-semibold">
                     <Coins className="h-3 w-3" />
                     up to {meta.kalMax} KAL
                   </div>
@@ -296,7 +298,7 @@ export default function ContentPage() {
 
           {error && <p className="text-sm text-rose-400">{error}</p>}
 
-          {!isConnected ? (
+          {!mounted || !isConnected ? (
             <div className="flex items-center gap-3 py-2">
               <p className="text-sm text-muted-foreground">Connect wallet to start the test.</p>
               <WalletButton />

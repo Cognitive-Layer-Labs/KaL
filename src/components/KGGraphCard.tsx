@@ -33,7 +33,7 @@ export function KGGraphCard({ knowledgeId, graph }: Props) {
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-            <Network className="h-4 w-4 text-[#A29BFE]" />
+            <Network className="h-4 w-4 text-kal-light" />
             Knowledge Graph
           </CardTitle>
           <Button
@@ -150,7 +150,7 @@ export function GraphCanvas({
         const textY = node.y + r + 3 / globalScale;
 
         ctx.lineWidth = 3 / globalScale;
-        ctx.strokeStyle = "rgba(9,9,16,0.95)";
+        ctx.strokeStyle = "rgba(21,21,18,0.95)";
         ctx.strokeText(node.label, node.x, textY);
         ctx.fillStyle = node.fg;
         ctx.fillText(node.label, node.x, textY);
@@ -198,7 +198,7 @@ export function GraphCanvas({
         ctx.beginPath();
         ctx.moveTo(startX, startY);
         ctx.lineTo(endX, endY);
-        ctx.strokeStyle = "#4a4a6e";
+        ctx.strokeStyle = "#4a4742";
         ctx.lineWidth = 1.5 / globalScale;
         ctx.stroke();
 
@@ -214,7 +214,7 @@ export function GraphCanvas({
           tipX - arrowLen * (Math.cos(arrowAngle) * ux + Math.sin(arrowAngle) * uy),
           tipY - arrowLen * (Math.cos(arrowAngle) * uy - Math.sin(arrowAngle) * ux),
         );
-        ctx.strokeStyle = "#a78bfa";
+        ctx.strokeStyle = "#F92672";
         ctx.lineWidth = 1 / globalScale;
         ctx.stroke();
 
@@ -228,7 +228,7 @@ export function GraphCanvas({
         ctx.textBaseline = "middle";
 
         ctx.lineWidth = 2.5 / globalScale;
-        ctx.strokeStyle = "rgba(9,9,16,0.95)";
+        ctx.strokeStyle = "rgba(21,21,18,0.95)";
         ctx.strokeText(link.label, midX, midY);
         ctx.fillStyle = "#a0aec0";
         ctx.fillText(link.label, midX, midY);

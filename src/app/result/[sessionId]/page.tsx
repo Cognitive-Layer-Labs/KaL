@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useVerifyAndMint } from "@/lib/contracts";
 import { useAccount } from "wagmi";
+import { reattest } from "@/lib/api";
 import type { PoCWResult, OnchainAttestation } from "@/lib/api";
 import { formatKAL, bloomColor } from "@/lib/utils";
 
@@ -35,26 +36,34 @@ export default function ResultPage() {
     }
     // If no cached result (e.g. direct nav), try to show from URL params
     const passed = searchParams.get("passed") === "1";
-    router.replace(passed ? router.toString() : "/");
+    router.replace(passed ? router.toString() : "/courses");
   }, [sessionId, searchParams, router]);
 
-  async function handleMintSBT() {
-    if (!result?.attestation || result.attestation.type !== "onchain") return;
-    const att = result.attestation as OnchainAttestation;
+  async function handleMintSBT(forceReattest = false) {
+    if (!result) return;
     setMintError(null);
     try {
-      await verifyAndMint(
-        {
-          subject: att.oracle as `0x${string}`,
-          contentId: BigInt(att.contentId),
-          score: BigInt(att.score),
-          nonce: att.nonce as `0x${string}`,
-          expiry: BigInt(att.expiry),
-          tokenUri: att.tokenUri,
-          contentHash: att.contentHash as `0x${string}`,
-        },
-        att.signature as `0x${string}`
-      );
+      let att =
+        result.attestation?.type === "onchain" ? (result.attestation as OnchainAttestation) : null;
+      // Recovery: if the original attestation is missing/expired, or the user retries (e.g. they
+      // had no gas earlier or the network failed), fetch a fresh one (new nonce/expiry).
+      const expired = att ? att.expiry * 1000 < Date.now() : true;
+      if (forceReattest || !att || expired) {
+        const fresh = await reattest(result.subject, result.contentId);
+        if (fresh.attestation?.type !== "onchain") throw new Error("Re-attestation unavailable");
+        att = fresh.attestation as OnchainAttestation;
+      }
+      // verifyAndMint mints the per-holder SBT AND the KAL reward atomically, to result.subject.
+      await verifyAndMint({
+        user: result.subject as `0x${string}`,
+        contentId: BigInt(att.contentId),
+        score: BigInt(att.score),
+        kalAmount: BigInt(att.kalAmount),
+        expiry: BigInt(att.expiry),
+        nonce: att.nonce as `0x${string}`,
+        tokenUri: att.tokenUri,
+        signature: att.signature as `0x${string}`,
+      });
     } catch (e) {
       setMintError((e as Error).message);
     }
@@ -77,11 +86,11 @@ export default function ResultPage() {
       {/* Header */}
       <div className={`rounded-2xl p-6 text-center ${
         passed
-          ? "bg-gradient-to-b from-[#6C5CE7]/20 to-[#6C5CE7]/5 border border-[#6C5CE7]/30"
+          ? "bg-gradient-to-b from-kal/20 to-kal/5 border border-kal/30"
           : "bg-gradient-to-b from-rose-600/20 to-rose-600/5 border border-rose-600/30"
       }`}>
         {passed ? (
-          <Trophy className="h-12 w-12 text-[#A29BFE] mx-auto mb-3" />
+          <Trophy className="h-12 w-12 text-kal-light mx-auto mb-3" />
         ) : (
           <XCircle className="h-12 w-12 text-rose-400 mx-auto mb-3" />
         )}
@@ -110,7 +119,7 @@ export default function ResultPage() {
           </div>
           <div className="grid grid-cols-3 gap-3 text-center text-sm">
             <div>
-              <div className="text-2xl font-bold text-[#A29BFE]">{result.questions_asked}</div>
+              <div className="text-2xl font-bold text-kal-light">{result.questions_asked}</div>
               <div className="text-xs text-muted-foreground">Questions</div>
             </div>
             <div>
@@ -127,13 +136,13 @@ export default function ResultPage() {
 
       {/* KAL earned */}
       {passed && kal > 0 && (
-        <Card className="border-[#6C5CE7]/30 bg-[#6C5CE7]/5">
+        <Card className="border-kal/30 bg-kal/5">
           <CardContent className="flex items-center gap-4 pt-6">
-            <Coins className="h-8 w-8 text-[#A29BFE] shrink-0" />
+            <Coins className="h-8 w-8 text-kal-light shrink-0" />
             <div>
               <p className="text-sm text-muted-foreground">KAL Earned</p>
-              <p className="text-3xl font-bold text-[#A29BFE]">{formatKAL(kal)} <span className="text-lg">KAL</span></p>
-              <p className="text-xs text-muted-foreground mt-0.5">Minted automatically by the oracle</p>
+              <p className="text-3xl font-bold text-kal-light">{formatKAL(kal)} <span className="text-lg">KAL</span></p>
+              <p className="text-xs text-muted-foreground mt-0.5">Minted to your wallet together with your SBT when you claim below</p>
             </div>
           </CardContent>
         </Card>
@@ -169,7 +178,7 @@ export default function ResultPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
-              <Award className="h-4 w-4 text-[#A29BFE]" />
+              <Award className="h-4 w-4 text-kal-light" />
               Soulbound Token
             </CardTitle>
           </CardHeader>
@@ -190,22 +199,35 @@ export default function ResultPage() {
             ) : (
               <>
                 <p className="text-sm text-muted-foreground">
-                  Mint a non-transferable Proof of Cognitive Work token to your wallet.
+                  Claim your reward: this mints a non-transferable Proof of Cognitive Work token
+                  {kal > 0 ? <> plus <span className="text-kal-light font-medium">{formatKAL(kal)} KAL</span></> : null}{" "}
+                  to your wallet in a single transaction. No rush — you can come back and claim later.
                 </p>
                 {mintError && (
-                  <div className="flex items-center gap-2 text-rose-400 text-xs">
-                    <AlertCircle className="h-3.5 w-3.5" />
-                    {mintError}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-rose-400 text-xs">
+                      <AlertCircle className="h-3.5 w-3.5" />
+                      {mintError}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      disabled={isPending || isConfirming || !address}
+                      onClick={() => handleMintSBT(true)}
+                    >
+                      Retry with a fresh attestation
+                    </Button>
                   </div>
                 )}
                 <Button
                   variant="kal"
                   className="w-full"
                   disabled={isPending || isConfirming || !address}
-                  onClick={handleMintSBT}
+                  onClick={() => handleMintSBT()}
                 >
                   <Award className="h-4 w-4" />
-                  {isPending || isConfirming ? "Minting…" : "Mint SBT"}
+                  {isPending || isConfirming ? "Minting…" : "Claim SBT + KAL"}
                 </Button>
               </>
             )}
@@ -216,15 +238,15 @@ export default function ResultPage() {
       {/* Actions */}
       <div className="flex gap-3">
         <Button variant="outline" className="flex-1" asChild>
-          <Link href="/">
+          <Link href="/courses">
             <Home className="h-4 w-4" />
-            Catalog
+            Courses
           </Link>
         </Button>
         <Button variant="outline" className="flex-1" asChild>
-          <Link href="/dashboard">
+          <Link href="/account">
             <ArrowRight className="h-4 w-4" />
-            Dashboard
+            Account
           </Link>
         </Button>
       </div>

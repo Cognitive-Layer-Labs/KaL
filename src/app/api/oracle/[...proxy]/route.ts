@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 const ORACLE_BASE_URL = process.env.POCW_ORACLE_BASE_URL;
 const ORACLE_API_KEY = process.env.POCW_API_KEY;
 
-const ALLOWED_ROOTS = new Set(["index", "verify", "upload", "graph"]);
+const ALLOWED_ROOTS = new Set(["index", "verify", "upload", "graph", "admin", "access", "sbts"]);
 
 function jsonError(message: string, status: number): NextResponse {
   return NextResponse.json({ error: message, code: "INVALID_CONFIG" }, { status });
@@ -34,6 +34,9 @@ async function proxy(request: NextRequest, segments: string[]): Promise<NextResp
   if (ct) headers.set("content-type", ct);
   const accept = request.headers.get("accept");
   if (accept) headers.set("accept", accept);
+  // Forward admin wallet address for the cosmetic admin gate
+  const adminAddr = request.headers.get("x-admin-address");
+  if (adminAddr) headers.set("x-admin-address", adminAddr);
 
   const method = request.method;
   const body = method !== "GET" && method !== "HEAD"

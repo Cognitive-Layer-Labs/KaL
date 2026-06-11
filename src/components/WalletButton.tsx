@@ -26,10 +26,11 @@ export function WalletButton() {
   if (isConnected && address) {
     return (
       <div className="flex items-center gap-2">
-        <span className="text-xs text-muted-foreground font-mono">
+        <span className="hidden sm:inline-flex items-center gap-2 rounded-lg border border-border bg-secondary/50 px-3 h-10 text-xs font-mono text-muted-foreground">
+          <span className="inline-block h-2 w-2 rounded-full bg-mono-green animate-pulse-dot" />
           {address.slice(0, 6)}…{address.slice(-4)}
         </span>
-        <Button variant="outline" size="sm" onClick={() => disconnect()}>
+        <Button variant="outline" size="sm" className="h-10" onClick={() => disconnect()}>
           Disconnect
         </Button>
       </div>

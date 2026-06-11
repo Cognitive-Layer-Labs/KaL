@@ -125,7 +125,7 @@ export function QuestionCard({ question, onSubmit, onNext, isSubmitting, feedbac
                 <ul className="space-y-1">
                   {feedback.referenceKeyPoints.map((kp, i) => (
                     <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
-                      <span className="text-[#A29BFE] mt-0.5">·</span>
+                      <span className="text-kal-light mt-0.5">·</span>
                       {kp}
                     </li>
                   ))}
@@ -150,8 +150,8 @@ export function QuestionCard({ question, onSubmit, onNext, isSubmitting, feedbac
                     disabled={isSubmitting}
                     className={`w-full text-left px-4 py-3 rounded-lg border text-sm transition-colors disabled:opacity-50 ${
                       selected === opt
-                        ? "border-[#6C5CE7] bg-[#6C5CE7]/10 text-foreground"
-                        : "border-border hover:border-[#6C5CE7]/40 hover:bg-secondary"
+                        ? "border-kal bg-kal/10 text-foreground"
+                        : "border-border hover:border-kal/40 hover:bg-secondary"
                     }`}
                   >
                     {opt}
@@ -165,7 +165,7 @@ export function QuestionCard({ question, onSubmit, onNext, isSubmitting, feedbac
                 placeholder="Type your answer here…"
                 rows={4}
                 disabled={isSubmitting}
-                className="w-full rounded-lg border border-border bg-secondary px-4 py-3 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-[#6C5CE7] placeholder:text-muted-foreground disabled:opacity-50"
+                className="w-full rounded-lg border border-border bg-secondary px-4 py-3 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-kal placeholder:text-muted-foreground disabled:opacity-50"
               />
             )}
 

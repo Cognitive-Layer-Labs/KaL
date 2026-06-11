@@ -3,6 +3,8 @@
  * POCW_API_KEY is never exposed to the browser.
  */
 
+import { MOCK, MOCK_CONTENT, MOCK_GRAPH, mockStatus } from "./mock";
+
 const PROXY = "/api/oracle";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -56,13 +58,14 @@ export interface OnchainAttestation {
   signature: string;
   contentId: number;
   score: number;
+  /** KAL reward in wei (18-dec, decimal string) — minted atomically with the SBT in verifyAndMint */
+  kalAmount: string;
   oracle: string;
   controllerAddress: string;
   sbtAddress: string;
   nonce: string;
   expiry: number;
   tokenUri: string;
-  contentHash: string;
 }
 
 export interface OffchainAttestation {
@@ -70,11 +73,11 @@ export interface OffchainAttestation {
   signature: string;
   contentId: number;
   score: number;
+  kalAmount: string;
   oracle: string;
   nonce: string;
   expiry: number;
   tokenUri: string;
-  contentHash: string;
 }
 
 export type AttestationResult = OnchainAttestation | OffchainAttestation;
@@ -97,13 +100,26 @@ export interface PoCWResult {
   tokenUri?: string;
 }
 
+export interface UnlockRule {
+  mode: "any";
+  /** Integer content_ids; holding ANY ONE SBT for these courses unlocks access. */
+  sbtContentIds: number[];
+}
+
 export interface ContentItem {
   knowledgeId: string;
   contentId: number;
   source: string;
   status: "ready" | "indexing" | "failed";
   title?: string;
+  contentType?: string;
   createdAt?: string;
+  /** Access tier — present when returned by the backend. */
+  tier?: "free" | "paid" | "unlocked";
+  /** KAL cost (paid tier only). */
+  kalPrice?: number;
+  /** Unlock rule (unlocked tier only). */
+  unlockRule?: UnlockRule;
 }
 
 export interface SessionConfig {
@@ -145,6 +161,7 @@ export async function listContent(params?: {
   limit?: number;
   offset?: number;
 }): Promise<{ items: ContentItem[]; total: number }> {
+  if (MOCK) return { items: MOCK_CONTENT, total: MOCK_CONTENT.length };
   const qs = new URLSearchParams();
   if (params?.status) qs.set("status", params.status);
   if (params?.limit != null) qs.set("limit", String(params.limit));
@@ -162,7 +179,11 @@ export async function listContent(params?: {
     source:      r.source,
     status:      r.status,
     title:       r.title ?? undefined,
+    contentType: r.content_type ?? r.contentType ?? undefined,
     createdAt:   r.created_at   ?? r.createdAt,
+    tier:        r.tier         ?? undefined,
+    kalPrice:    r.kal_price    ?? r.kalPrice   ?? undefined,
+    unlockRule:  r.unlock_rule  ? (typeof r.unlock_rule === "string" ? JSON.parse(r.unlock_rule) : r.unlock_rule) : undefined,
   }));
   return { items, total: data.total ?? items.length };
 }
@@ -170,6 +191,7 @@ export async function listContent(params?: {
 export async function getIndexStatus(
   knowledgeId: string
 ): Promise<{ knowledgeId: string; status: string; title?: string; source?: string; error?: string }> {
+  if (MOCK) return mockStatus(knowledgeId);
   const res = await fetch(`${PROXY}/index/${knowledgeId}`);
   if (!res.ok) throw new Error(await extractError(res, "Status check failed"));
   const d = await res.json();
@@ -209,6 +231,7 @@ export async function uploadFile(
 }
 
 export async function getGraph(knowledgeId: string): Promise<KGGraph> {
+  if (MOCK) return MOCK_GRAPH;
   const res = await fetch(`${PROXY}/graph/${knowledgeId}`);
   if (!res.ok) throw new Error(await extractError(res, "Graph fetch failed"));
   const data = await res.json();
@@ -255,6 +278,116 @@ export async function getResult(sessionId: string): Promise<PoCWResult> {
   const res = await fetch(`${PROXY}/verify/${sessionId}/result`);
   if (!res.ok) throw new Error(await extractError(res, "Result fetch failed"));
   return res.json();
+}
+
+/** An SBT the learner has earned (from oracle records), used by the account page. */
+export interface EarnedSBT {
+  contentId: number;
+  /** ERC-1155 token id (per-holder) as a decimal string. */
+  tokenId: string;
+  knowledgeId: string | null;
+  score: number;
+  tokenUri: string;
+}
+
+/** List the SBTs a learner earned — no full-chain scan; the frontend verifies with balanceOf. */
+export async function sbtsOfOwner(address: string): Promise<EarnedSBT[]> {
+  const res = await fetch(`${PROXY}/sbts/${address}`);
+  if (!res.ok) return [];
+  const json = await res.json();
+  return (json.sbts ?? []) as EarnedSBT[];
+}
+
+/** Re-issue a fresh attestation (new nonce/expiry) so a learner can mint later (recovery). */
+export async function reattest(
+  address: string,
+  contentId: number
+): Promise<{ attestation: AttestationResult; subject: string; contentId: number; tokenUri: string }> {
+  const res = await fetch(`${PROXY}/verify/reattest`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ address, contentId }),
+  });
+  if (!res.ok) throw new Error(await extractError(res, "Re-attest failed"));
+  return res.json();
+}
+
+// ─── Admin API ───────────────────────────────────────────────────────────────
+
+/**
+ * List all content items with their access-control fields.
+ * Requires the connected wallet to be the admin wallet (sent as X-Admin-Address).
+ */
+export async function listAccessAdmin(adminAddress: string): Promise<ContentItem[]> {
+  const res = await fetch(`${PROXY}/admin/access`, {
+    headers: { "x-admin-address": adminAddress },
+  });
+  if (!res.ok) throw new Error(await extractError(res, "Admin list failed"));
+  const data = await res.json();
+  return (data.items ?? []).map((r: any) => ({
+    knowledgeId:  r.knowledgeId,
+    contentId:    r.contentId,
+    source:       r.source,
+    status:       r.status,
+    title:        r.title ?? undefined,
+    tier:         r.tier ?? "free",
+    kalPrice:     r.kalPrice ?? undefined,
+    unlockRule:   r.unlockRule ?? undefined,
+  }));
+}
+
+/**
+ * Fetch an oracle-signed price quote for a paid-tier course.
+ * The quote is then passed to KalPaywall.purchase() via the usePurchaseCourse hook.
+ */
+export async function fetchPriceQuote(
+  knowledgeId: string,
+  buyer: string
+): Promise<{
+  contentId: number;
+  priceWei: string;
+  priceKal: number;
+  expiry: number;
+  nonce: `0x${string}`;
+  signature: `0x${string}`;
+  unsigned?: boolean;
+}> {
+  const res = await fetch(`${PROXY}/access/quote`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ knowledgeId, buyer }),
+  });
+  if (!res.ok) throw new Error(await extractError(res, "Quote failed"));
+  return res.json();
+}
+
+/** Re-derive and store the title for an already-indexed content entry. */
+export async function rederiveContentTitle(
+  knowledgeId: string,
+  adminAddress: string
+): Promise<{ knowledgeId: string; title: string }> {
+  const res = await fetch(`${PROXY}/index/${knowledgeId}/title`, {
+    method: "PATCH",
+    headers: { "x-admin-address": adminAddress },
+  });
+  if (!res.ok) throw new Error(await extractError(res, "Title re-derive failed"));
+  return res.json();
+}
+
+export async function setContentAccess(
+  knowledgeId: string,
+  access: { tier: "free" | "paid" | "unlocked"; kalPrice?: number; unlockRule?: UnlockRule },
+  adminAddress: string
+): Promise<void> {
+  const res = await fetch(`${PROXY}/admin/access/${knowledgeId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-address": adminAddress,
+    },
+    body: JSON.stringify(access),
+  });
+  if (!res.ok) throw new Error(await extractError(res, "Access update failed"));
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

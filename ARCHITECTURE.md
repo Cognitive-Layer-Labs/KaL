@@ -139,7 +139,16 @@ Without spending sinks, a reward token inflates to zero. KAL has three sinks:
 
 ## 8. Liquidity Model
 
-KAL has three distinct liquidity layers.
+> **Implementation status (current build).** The protocol as implemented is intentionally
+> simplified: **KAL is minted 100% to the learner**, atomically with their SBT inside
+> `PoCW_Controller.verifyAndMint` (the controller is the KAL owner, so KAL can only be created
+> through a signed, expiring, nonce-protected oracle attestation). There is **no treasury cut, no
+> revenue split, no royalties, and no protocol-owned liquidity** on-chain. The multi-layer
+> liquidity design below is the longer-term vision, not what the contracts currently do. The paid
+> course paywall (`KalPaywall`) does route purchase KAL to a treasury address, but no automated
+> market-making or staking is wired up.
+
+KAL has three distinct liquidity layers (vision).
 
 ### Layer 1 — Market Liquidity (DEX)
 

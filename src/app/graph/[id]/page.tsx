@@ -18,7 +18,7 @@ export default function GraphFullPage() {
   }, [id]);
 
   return (
-    <div className="w-screen h-screen bg-[#0c0c12] flex flex-col overflow-hidden">
+    <div className="w-screen h-screen bg-background flex flex-col overflow-hidden">
       <div ref={containerRef} className="flex-1 relative">
         {!graph && !error && (
           <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm">

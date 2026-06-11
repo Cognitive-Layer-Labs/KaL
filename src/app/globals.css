@@ -2,24 +2,45 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+  KaL — "Neon Alchemy Lab × Monokai IDE"
+  Near-black warm canvas, logo-magenta hero accent, Monokai secondaries.
+*/
+
 @layer base {
   :root {
-    --background: 222 47% 4%;
-    --foreground: 210 40% 96%;
-    --card: 222 47% 8%;
-    --card-foreground: 210 40% 96%;
-    --primary: 251 87% 69%;
-    --primary-foreground: 222 47% 4%;
-    --secondary: 222 47% 12%;
-    --secondary-foreground: 210 40% 96%;
-    --muted: 222 47% 12%;
-    --muted-foreground: 215 20% 55%;
-    --accent: 251 87% 69%;
-    --accent-foreground: 222 47% 4%;
-    --border: 222 47% 16%;
-    --input: 222 47% 12%;
-    --ring: 251 87% 69%;
-    --radius: 0.75rem;
+    /* surfaces — warm near-black, Monokai-inspired */
+    --background: 60 6% 8%;
+    --foreground: 60 30% 96%;
+    --card: 60 5% 11%;
+    --card-foreground: 60 30% 96%;
+    --popover: 54 6% 13%;
+    --popover-foreground: 60 30% 96%;
+
+    /* hero — logo magenta (≈ Monokai pink #F92672) */
+    --primary: 338 95% 56%;
+    --primary-foreground: 60 8% 8%;
+    --accent: 338 95% 56%;
+    --accent-foreground: 60 8% 8%;
+    --ring: 338 95% 56%;
+
+    /* neutrals */
+    --secondary: 54 6% 15%;
+    --secondary-foreground: 60 20% 90%;
+    --muted: 54 6% 15%;
+    --muted-foreground: 50 8% 60%;
+    --border: 56 6% 19%;
+    --input: 54 6% 17%;
+
+    --radius: 0.875rem;
+
+    /* Monokai secondary accents (raw, for inline use / canvas) */
+    --mono-green: 80 76% 53%;
+    --mono-yellow: 54 70% 68%;
+    --mono-orange: 32 98% 55%;
+    --mono-cyan: 190 81% 67%;
+    --mono-purple: 261 100% 75%;
+    --mono-red: 3 100% 67%;
   }
 }
 
@@ -27,12 +48,132 @@
   * {
     @apply border-border;
   }
+  html {
+    scroll-behavior: smooth;
+  }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans antialiased;
+    /* atmospheric magenta wash anchored top + a deep purple counter-glow */
+    background-image:
+      radial-gradient(60rem 40rem at 78% -8%, hsl(338 95% 56% / 0.16), transparent 60%),
+      radial-gradient(48rem 36rem at 8% 108%, hsl(261 100% 65% / 0.12), transparent 60%);
+    background-attachment: fixed;
+  }
+  /* Fonts are applied via explicit Tailwind classes (font-display, font-heading2)
+     NOT globally on h-tags — this prevents decorative fonts on small card headers
+     (shadcn CardTitle renders as h3 and looked terrible at small sizes). */
+  ::selection {
+    background: hsl(338 95% 56% / 0.32);
+    color: hsl(60 30% 98%);
+  }
+}
+
+@layer utilities {
+  /* fine film-grain over the whole app for tactile depth */
+  .grain::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* magenta glow helpers */
+  .text-glow {
+    text-shadow: 0 0 24px hsl(338 95% 56% / 0.55), 0 0 4px hsl(338 95% 56% / 0.4);
+  }
+  .glow-sm {
+    box-shadow: 0 0 0 1px hsl(338 95% 56% / 0.25), 0 8px 30px -8px hsl(338 95% 56% / 0.45);
+  }
+  .glow-md {
+    box-shadow: 0 0 0 1px hsl(338 95% 56% / 0.35), 0 12px 50px -10px hsl(338 95% 56% / 0.6);
+  }
+
+  /* frosted-flask glass surface */
+  .glass {
+    background: hsl(60 5% 11% / 0.7);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+  }
+
+  /* mono "tape" label — for IDs, hashes, KAL amounts */
+  .tape {
+    @apply font-mono text-xs tracking-tight;
+  }
+
+  /* kicker / eyebrow label — uses Bitcount Grid Single for decorative section labels */
+  .kicker {
+    font-family: 'Bitcount Grid Single', monospace;
+    @apply text-xs tracking-widest uppercase;
   }
 }
 
 /* KG graph canvas */
 .graph-canvas-wrapper canvas {
   border-radius: var(--radius);
+}
+
+/* ── Neon-pink drip — falls BELOW the card ────────────────────────────────────
+   .drop-pipe elements are siblings of the <Card> inside a relative wrapper that
+   has NO overflow-hidden. They sit at bottom: 0 of the wrapper (= card bottom
+   edge). The ::after teardrop grows DOWNWARD (transform-origin: top center),
+   hangs below the card border, then falls further and fades out.
+   Positions are random per mount (Math.random in ContentCard).
+   Gated behind prefers-reduced-motion.
+*/
+@keyframes drop-drip-down {
+  0%   { transform: translateX(-50%) scaleY(0);            opacity: 0;   }
+  18%  { transform: translateX(-50%) scaleY(0.4);          opacity: 0.9; }
+  55%  { transform: translateX(-50%) scaleY(1);            opacity: 1;   }
+  72%  { transform: translateX(-50%) scaleY(1.15);         opacity: 1;   }
+  100% { transform: translateX(-50%) scaleY(0.4) translateY(34px); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Zero-size anchor at the card's bottom edge (inside the no-overflow wrapper) */
+  .drop-pipe {
+    position: absolute;
+    bottom: 0;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+    z-index: 30;
+  }
+
+  /* Teardrop — starts at top: 0 (= card bottom border), grows DOWNWARD */
+  .drop-pipe::after {
+    content: "";
+    position: absolute;
+    top: 0;             /* hangs below the card's bottom border */
+    left: 0;
+    transform-origin: top center;   /* grows downward */
+    transform: translateX(-50%) scaleY(0);
+    width: 10px;
+    height: 13px;
+    border-radius: 50% 50% 55% 55% / 38% 38% 62% 62%;
+    background: radial-gradient(ellipse at 38% 38%, #FF6FA5 0%, #F92672 55%, #C81E5B 100%);
+    box-shadow:
+      0 0 12px 4px rgba(249, 38, 114, 0.55),
+      0 0 5px  2px rgba(249, 38, 114, 0.35);
+    animation: drop-drip-down var(--drip-dur, 4.5s) var(--drip-delay, 0s) ease-in infinite;
+  }
+}
+
+/* custom scrollbar — thin, magenta on hover */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: hsl(60 6% 8%);
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(56 6% 22%);
+  border-radius: 8px;
+  border: 2px solid hsl(60 6% 8%);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(338 95% 56% / 0.6);
 }
