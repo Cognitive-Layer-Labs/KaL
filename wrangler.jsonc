@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "kal",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2025-03-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true
+  },
+  // Non-secret runtime var read by the server-side oracle proxy (src/app/api/oracle).
+  // Secret POCW_API_KEY must be set separately: `npx wrangler secret put POCW_API_KEY`.
+  // NEXT_PUBLIC_* values are baked at build time from .env.local (CLI) or the dashboard build vars.
+  "vars": {
+    "POCW_ORACLE_BASE_URL": "https://pocw.baghici.com"
+  }
+}
