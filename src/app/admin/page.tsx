@@ -1,19 +1,61 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { useAccount } from "wagmi";
+import { useAccount, useSignTypedData } from "wagmi";
 import {
   Upload, Link as LinkIcon, CheckCircle, AlertCircle, RefreshCw,
   ShieldAlert, Settings2, Coins, Lock, Sparkles, Save, ChevronDown, Wand2,
+  Eye, EyeOff, Trash2, RotateCw, Loader2, AlertTriangle,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { WalletButton } from "@/components/WalletButton";
-import { indexUrl, uploadFile, getIndexStatus, listAccessAdmin, setContentAccess, rederiveContentTitle, type ContentItem, type UnlockRule } from "@/lib/api";
+import {
+  indexUrl, uploadFile, getIndexStatus, listAccessAdmin, setContentAccess, rederiveContentTitle,
+  setContentVisibility, deleteResource, reindexResource, wipeAllResources,
+  type ContentItem, type UnlockRule, type AdminAuth,
+} from "@/lib/api";
 import { useMounted } from "@/lib/use-mounted";
 
 const ADMIN_ADDRESS = (process.env.NEXT_PUBLIC_ADMIN_ADDRESS ?? "").toLowerCase();
+const ADMIN_CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID ?? 84532);
+
+const ADMIN_ACTION_TYPES = {
+  AdminAction: [
+    { name: "action", type: "string" },
+    { name: "target", type: "string" },
+    { name: "expiry", type: "uint256" },
+    { name: "nonce", type: "bytes32" },
+  ],
+} as const;
+
+type SignAdminAction = (action: string, target: string) => Promise<AdminAuth>;
+
+function randomNonce(): `0x${string}` {
+  const b = new Uint8Array(32);
+  crypto.getRandomValues(b);
+  return ("0x" + Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("")) as `0x${string}`;
+}
+
+/** Hook returning a function that asks the admin wallet to sign an AdminAction (EIP-712). */
+function useAdminSign(): SignAdminAction {
+  const { signTypedDataAsync } = useSignTypedData();
+  return useCallback(
+    async (action: string, target: string): Promise<AdminAuth> => {
+      const expiry = Math.floor(Date.now() / 1000) + 300;
+      const nonce = randomNonce();
+      const signature = (await signTypedDataAsync({
+        domain: { name: "PoCW-Admin", version: "1", chainId: ADMIN_CHAIN_ID },
+        types: ADMIN_ACTION_TYPES,
+        primaryType: "AdminAction",
+        message: { action, target, expiry: BigInt(expiry), nonce },
+      })) as `0x${string}`;
+      return { action, target, expiry, nonce, signature };
+    },
+    [signTypedDataAsync]
+  );
+}
 
 type IndexResult = { knowledgeId: string; status: string; contentId?: number };
 
@@ -23,11 +65,13 @@ function AccessEditor({
   item,
   allItems,
   adminAddress,
+  signAdminAction,
   onSaved,
 }: {
   item: ContentItem;
   allItems: ContentItem[];
   adminAddress: string;
+  signAdminAction: SignAdminAction;
   onSaved: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -38,6 +82,8 @@ function AccessEditor({
   const [err, setErr] = useState<string | null>(null);
   const [derivingTitle, setDerivingTitle] = useState(false);
   const [derivedTitle, setDerivedTitle] = useState<string | null>(null);
+  const [busy, setBusy] = useState<null | "hide" | "reindex" | "delete">(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const togglePrereq = (contentId: number) => {
     setPrereqIds((prev) =>
@@ -78,6 +124,52 @@ function AccessEditor({
     }
   }
 
+  async function toggleHidden() {
+    setBusy("hide");
+    setErr(null);
+    try {
+      await setContentVisibility(item.knowledgeId, !item.hidden, adminAddress);
+      onSaved();
+    } catch (e) {
+      setErr((e as Error).message.slice(0, 90));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleReindex() {
+    setBusy("reindex");
+    setErr(null);
+    try {
+      const auth = await signAdminAction("reindex", item.knowledgeId);
+      await reindexResource(item.knowledgeId, auth);
+      onSaved();
+    } catch (e) {
+      setErr((e as Error).message.slice(0, 90));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      return;
+    }
+    setBusy("delete");
+    setErr(null);
+    try {
+      const auth = await signAdminAction("delete", item.knowledgeId);
+      await deleteResource(item.knowledgeId, auth);
+      onSaved();
+    } catch (e) {
+      setErr((e as Error).message.slice(0, 90));
+      setConfirmDelete(false);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   const displayTitle = derivedTitle ?? item.title ?? item.source;
 
   return (
@@ -89,22 +181,61 @@ function AccessEditor({
             {item.knowledgeId.slice(0, 24)}…
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1.5">
           <Badge variant={item.tier ?? "free" as "free" | "paid" | "unlocked"}>
             {item.tier ?? "free"}
           </Badge>
+          {item.hidden && (
+            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+              Hidden
+            </span>
+          )}
           {/* Re-derive title via LLM — fixes stale/wrong titles from old indexing */}
           <Button
             variant="outline"
             size="sm"
             className="h-7 gap-1 px-2 text-xs"
             title="Re-derive title using LLM (fixes wrong titles from old indexing)"
-            disabled={derivingTitle}
+            disabled={derivingTitle || busy !== null}
             onClick={handleRederiveTitle}
           >
             <Wand2 className={`h-3.5 w-3.5 ${derivingTitle ? "animate-pulse" : ""}`} />
           </Button>
-          <Button variant="outline" size="sm" className="h-7 gap-1 px-2 text-xs" onClick={() => setOpen(!open)}>
+          {/* Hide / show from the public catalog (cosmetic gate) */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            title={item.hidden ? "Show in catalog" : "Hide from catalog"}
+            disabled={busy !== null}
+            onClick={toggleHidden}
+          >
+            {busy === "hide" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : item.hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+          </Button>
+          {/* Re-index from source — rebuilds the knowledge graph (signed) */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            title="Re-index from source (rebuilds the knowledge graph)"
+            disabled={busy !== null}
+            onClick={handleReindex}
+          >
+            {busy === "reindex" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCw className="h-3.5 w-3.5" />}
+          </Button>
+          {/* Delete — cascade, two-click confirm (signed) */}
+          <Button
+            variant="outline"
+            size="sm"
+            className={`h-7 px-2 text-xs ${confirmDelete ? "border-rose-500/60 text-rose-300" : "text-muted-foreground hover:text-rose-300"}`}
+            title="Delete resource (cascade — earned SBTs are kept)"
+            disabled={busy !== null}
+            onClick={handleDelete}
+          >
+            {busy === "delete" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+            {confirmDelete && <span className="ml-1">Confirm?</span>}
+          </Button>
+          <Button variant="outline" size="sm" className="h-7 gap-1 px-2 text-xs" disabled={busy !== null} onClick={() => setOpen(!open)}>
             <Settings2 className="h-3.5 w-3.5" />
             Edit
             <ChevronDown className={`h-3 w-3 transition-transform ${open ? "rotate-180" : ""}`} />
@@ -228,6 +359,12 @@ export default function AdminPage() {
   const [accessItems, setAccessItems] = useState<ContentItem[]>([]);
   const [accessLoading, setAccessLoading] = useState(false);
 
+  // Admin signing + wipe state
+  const signAdminAction = useAdminSign();
+  const [wiping, setWiping] = useState(false);
+  const [wipeArmed, setWipeArmed] = useState(false);
+  const [wipeErr, setWipeErr] = useState<string | null>(null);
+
   const isAdmin = mounted && isConnected && address?.toLowerCase() === ADMIN_ADDRESS;
 
   async function loadAccess() {
@@ -303,6 +440,25 @@ export default function AdminPage() {
     if (f) setFile(f);
   }, []);
 
+  async function handleWipeAll() {
+    if (!wipeArmed) {
+      setWipeArmed(true);
+      return;
+    }
+    setWiping(true);
+    setWipeErr(null);
+    try {
+      const auth = await signAdminAction("wipe", "*");
+      await wipeAllResources(auth);
+      setWipeArmed(false);
+      loadAccess();
+    } catch (e) {
+      setWipeErr((e as Error).message.slice(0, 120));
+    } finally {
+      setWiping(false);
+    }
+  }
+
   // Not connected or not admin
   if (!mounted || !isConnected) {
     return (
@@ -366,6 +522,7 @@ export default function AdminPage() {
                 item={item}
                 allItems={accessItems}
                 adminAddress={address!}
+                signAdminAction={signAdminAction}
                 onSaved={loadAccess}
               />
             ))}
@@ -465,6 +622,28 @@ export default function AdminPage() {
             </CardContent>
           </Card>
         )}
+      </section>
+
+      {/* ── Danger Zone ───────────────────────────────────────────────────── */}
+      <section className="space-y-3 rounded-xl border border-rose-500/30 bg-rose-500/5 p-4">
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-rose-300">
+          <AlertTriangle className="h-5 w-5" /> Danger Zone
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Permanently wipe <strong>ALL</strong> indexed resources (knowledge graphs + catalog rows).
+          Earned SBTs stay on-chain. Requires a wallet signature and cannot be undone.
+        </p>
+        {wipeErr && <p className="text-xs text-rose-400">{wipeErr}</p>}
+        <Button
+          variant="outline"
+          size="sm"
+          className="border-rose-500/40 text-rose-300 hover:bg-rose-500/10"
+          disabled={wiping}
+          onClick={handleWipeAll}
+        >
+          {wiping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+          {wipeArmed ? "Click again to confirm — wipe everything" : "Wipe all resources"}
+        </Button>
       </section>
     </div>
   );

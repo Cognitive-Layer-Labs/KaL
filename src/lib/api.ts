@@ -120,6 +120,8 @@ export interface ContentItem {
   kalPrice?: number;
   /** Unlock rule (unlocked tier only). */
   unlockRule?: UnlockRule;
+  /** Hidden from the public catalog (admin visibility toggle). */
+  hidden?: boolean;
 }
 
 export interface SessionConfig {
@@ -333,6 +335,7 @@ export async function listAccessAdmin(adminAddress: string): Promise<ContentItem
     tier:         r.tier ?? "free",
     kalPrice:     r.kalPrice ?? undefined,
     unlockRule:   r.unlockRule ?? undefined,
+    hidden:       r.hidden ?? false,
   }));
 }
 
@@ -388,6 +391,66 @@ export async function setContentAccess(
     body: JSON.stringify(access),
   });
   if (!res.ok) throw new Error(await extractError(res, "Access update failed"));
+}
+
+/** EIP-712 admin action authorization — produced in the UI via wallet signTypedData. */
+export interface AdminAuth {
+  action: string;
+  target: string;
+  expiry: number;
+  nonce: `0x${string}`;
+  signature: `0x${string}`;
+}
+
+/** Show or hide a course from the public catalog (cosmetic admin gate — no signature). */
+export async function setContentVisibility(
+  knowledgeId: string,
+  hidden: boolean,
+  adminAddress: string
+): Promise<void> {
+  const res = await fetch(`${PROXY}/admin/content/${knowledgeId}/visibility`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", "x-admin-address": adminAddress },
+    body: JSON.stringify({ hidden }),
+  });
+  if (!res.ok) throw new Error(await extractError(res, "Visibility update failed"));
+}
+
+/** Cascade-delete a resource (graph + catalog row). Requires a signed admin authorization. */
+export async function deleteResource(knowledgeId: string, auth: AdminAuth): Promise<void> {
+  const res = await fetch(`${PROXY}/admin/content/${knowledgeId}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ _admin: auth }),
+  });
+  if (!res.ok) throw new Error(await extractError(res, "Delete failed"));
+}
+
+/** Re-index a resource from its source (drops + rebuilds the graph). Requires a signed auth. */
+export async function reindexResource(
+  knowledgeId: string,
+  auth: AdminAuth
+): Promise<{ knowledgeId: string; status: string; contentId?: number }> {
+  const res = await fetch(`${PROXY}/admin/content/${knowledgeId}/reindex`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ _admin: auth }),
+  });
+  if (!res.ok) throw new Error(await extractError(res, "Re-index failed"));
+  return res.json();
+}
+
+/** Wipe ALL resources. Requires a signed auth over action="wipe", target="*". */
+export async function wipeAllResources(
+  auth: AdminAuth
+): Promise<{ wiped: boolean; contentRemoved: number; nodesRemoved: number }> {
+  const res = await fetch(`${PROXY}/admin/wipe`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ _admin: auth }),
+  });
+  if (!res.ok) throw new Error(await extractError(res, "Wipe failed"));
+  return res.json();
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

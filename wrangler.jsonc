@@ -11,6 +11,11 @@
   "observability": {
     "enabled": true
   },
+  // Custom domain — Wrangler creates the kal.baghici.com DNS record + edge cert on `deploy`
+  // (baghici.com is an active zone on this Cloudflare account). Bypasses the dashboard entirely.
+  "routes": [
+    { "pattern": "kal.baghici.com", "custom_domain": true }
+  ],
   // Non-secret runtime var read by the server-side oracle proxy (src/app/api/oracle).
   // Secret POCW_API_KEY must be set separately: `npx wrangler secret put POCW_API_KEY`.
   // NEXT_PUBLIC_* values are baked at build time from .env.local (CLI) or the dashboard build vars.
